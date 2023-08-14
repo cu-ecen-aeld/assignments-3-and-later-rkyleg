@@ -16,7 +16,7 @@ fi
 if [ ! -d $filesdir ]
 then 
   echo "not a dir"
-  touch $filesdir
+  mkdir -p $(dirname $filesdir)
 fi
 
 echo $writestr > $filesdir
