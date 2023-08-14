@@ -15,7 +15,7 @@ fi
 
 if [ ! -d $filesdir ]
 then 
-  echo "not a dir"
+  # echo "not a dir"
   mkdir -p $(dirname $filesdir)
 fi
 
