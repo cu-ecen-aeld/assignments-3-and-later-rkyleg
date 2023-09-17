@@ -4,7 +4,7 @@ CROSS_COMPILE ?= "native"
 default:
 	# echo "$(CROSS_COMPILE)"; \
 	if [ "$(CROSS_COMPILE)" = "aarch64-none-linux-gnu-" ]; then \
-		aarch64-linux-gnu-gcc writer.c -o writer; \
+		aarch64-none-linux-gnu-gcc writer.c -o writer; \
 	elif [ "$(CROSS_COMPILE)" = "native" ]; then \
 		gcc writer.c -o writer; \
 	else \
