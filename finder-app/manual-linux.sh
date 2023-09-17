@@ -83,13 +83,13 @@ ${CROSS_COMPILE}readelf -a bin/busybox | grep "program interpreter"
 ${CROSS_COMPILE}readelf -a bin/busybox | grep "Shared library"
 
 # TODO: Add library dependencies to rootfs
-cp /usr/aarch64-linux-gnu/lib/libm.so.6 $OUTDIR/rootfs/lib64
-cp /usr/aarch64-linux-gnu/lib/libresolv.so.2 $OUTDIR/rootfs/lib64
-cp /usr/aarch64-linux-gnu/lib/libc.so.6 $OUTDIR/rootfs/lib64
-cp /usr/aarch64-linux-gnu/lib/libm.so.6 $OUTDIR/rootfs/lib
-cp /usr/aarch64-linux-gnu/lib/libresolv.so.2 $OUTDIR/rootfs/lib
-cp /usr/aarch64-linux-gnu/lib/libc.so.6 $OUTDIR/rootfs/lib
-cp /usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1 $OUTDIR/rootfs/lib
+cp /usr/local/arm-cross-compiler/install/lib/libm.so.6 $OUTDIR/rootfs/lib64
+cp /usr/local/arm-cross-compiler/install/lib/libresolv.so.2 $OUTDIR/rootfs/lib64
+cp /usr/local/arm-cross-compiler/install/lib/libc.so.6 $OUTDIR/rootfs/lib64
+cp /usr/local/arm-cross-compiler/install/lib/libm.so.6 $OUTDIR/rootfs/lib
+cp /usr/local/arm-cross-compiler/install/lib/libresolv.so.2 $OUTDIR/rootfs/lib
+cp /usr/local/arm-cross-compiler/install/lib/libc.so.6 $OUTDIR/rootfs/lib
+cp /usr/local/arm-cross-compiler/install/lib/ld-linux-aarch64.so.1 $OUTDIR/rootfs/lib
 # TODO: Make device nodes
 sudo mknod -m 666 dev/null c 1 3
 sudo mknod -m 600 dev/console c 5 1
