@@ -42,7 +42,7 @@ bool start_thread_obtaining_mutex(pthread_t *thread, pthread_mutex_t *mutex,int 
      *
      * See implementation details in threading.h file comment block
      */
-    thread_data* params = malloc(sizeof(thread_data));
+    thread_data* params = (thread_data*)malloc(sizeof(thread_data));
     params->wait_to_obtain_ms = wait_to_obtain_ms;
     params->wait_to_release_ms = wait_to_release_ms;
     params->mutex = mutex;
