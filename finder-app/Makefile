@@ -1,7 +1,7 @@
 CROSS_COMPILE ?= "native"
-.SILENT: default clean
+.SILENT: all default clean
 
-default:
+all:
 	# echo "$(CROSS_COMPILE)"; \
 	if [ "$(CROSS_COMPILE)" = "aarch64-none-linux-gnu-" ]; then \
 		aarch64-none-linux-gnu-gcc writer.c -o writer; \
