@@ -2,6 +2,8 @@ CROSS_COMPILE ?= "native"
 .SILENT: all default clean
 
 all:
+	$(CC) $(CFLAGS) $(INCLUDES) $(OBJS) -o $(TARGET) $(LDFLAGS)
+default:
 	# echo "$(CROSS_COMPILE)"; \
 	if [ "$(CROSS_COMPILE)" = "aarch64-none-linux-gnu-" ]; then \
 		aarch64-none-linux-gnu-gcc writer.c -o writer; \
