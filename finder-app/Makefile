@@ -1,5 +1,6 @@
 CROSS_COMPILE ?= "native"
 TARGET=writer
+OBJS=writer.c
 .SILENT: all default clean
 
 all:
