@@ -1,4 +1,5 @@
 CROSS_COMPILE ?= "native"
+TARGET=writer
 .SILENT: all default clean
 
 all:
