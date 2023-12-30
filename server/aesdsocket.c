@@ -1,31 +1,29 @@
-#include <stdbool.h>
-#include <errno.h>
+#include "aesdsocket.h"
+#include "linked_list.h"
+#include <asm-generic/socket.h>
+#include <bits/pthreadtypes.h>
 #include <netdb.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <syslog.h>
-#include <unistd.h>
-#include <arpa/inet.h>
+#include <pthread.h>
 #include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/wait.h>
+#include <unistd.h>
 
 #define PORT "9000"  // the port users will be connecting to
 #define BACKLOG 10     // how many pending connections queue will hold
 #define MAX_LEN 256
 bool caught_sigint = false;
 
-void send_data(int client_fd) {
+const Node* send_data(const Node* client) {
+  int rc = pthread_mutex_lock(client->data->mutex);
+  if ( rc != 0 ) {
+      syslog(LOG_ERR,"pthread_mutex_lock failed with %d\n",rc);
+      client->data->thread_completed = false;
+  }
+  
   FILE* file = fopen("/var/tmp/aesdsocketdata", "r");
-  // fgets(buffer, BUFSIZ, file);
   char buffer[BUFSIZ * 3];
+  
   while (fgets(buffer, BUFSIZ * 3, file)) {
-    // Remove trailing newline
-    // buffer[strcspn(buffer, "\n")] = 0;
-    // printf("%s\n", /xbuffer);
-    if (send(client_fd, buffer, strcspn(buffer, "\n") + 1, 0) == -1) {
+    if (send(client->data->client_fd, buffer, strcspn(buffer, "\n") + 1, 0) == -1) {
       syslog(LOG_ERR, "client send error: %s", strerror(errno));
     }
   }
@@ -40,23 +38,32 @@ void send_data(int client_fd) {
   //   }
   // }
   fclose(file);
+  rc = pthread_mutex_unlock(client->data->mutex);
+  if ( rc != 0 ) {
+      syslog(LOG_ERR,"pthread_mutex_unlock failed with %d\n",rc);
+      client->data->thread_completed = false;
+  }
+  return client;
 }
 
-static void signal_handler(int signal_number) {
+static void signal_handler(const int signal_number) {
   if ((signal_number == SIGINT) || (signal_number == SIGTERM) || (signal_number == SIGKILL)) {
     syslog(LOG_ERR, "Caught signal, exiting");
     caught_sigint = true;
     remove("/var/tmp/aesdsocketdata");
-    exit(1);
+    // exit(1);
   }
 }
 
-void handle_client(const int client_fd) {
+void* handle_client(void* thread_param) {
+  struct Node* client = (struct Node*) thread_param;
+
+  syslog(LOG_INFO,"Thread spawned to handle client connection on %d", client->data->client_fd);
   while (!caught_sigint) {
     char buffer[BUFSIZ * 3];
 
     // while((bytes_read = recv(client_fd, buffer, BUFSIZ*3, 0)) > 0 && !caught_sigint){
-    const int bytes_read = recv(client_fd, buffer, BUFSIZ * 3, 0);
+    const int bytes_read = recv(client->data->client_fd, buffer, BUFSIZ * 3, 0);
     // if (bytes_read == 0 || caught_sigint) {
     //   break;
     // }
@@ -65,25 +72,74 @@ void handle_client(const int client_fd) {
       FILE* file = fopen("/var/tmp/aesdsocketdata", "a");
       fputs(buffer, file);
       fclose(file);
-      send_data(client_fd);
+      send_data(client);
       break;
     }
   }
   // printf("closing fd: %i\n", client_fd);
-  close(client_fd);
-  exit(0);
+  client->data->thread_completed = true;
+  close(client->data->client_fd);
+  return thread_param;
+}
+
+void* append_timestamp(void* thread_param){
+  pthread_mutex_t* mutex = thread_param;
+  while (true){
+    int rc = pthread_mutex_lock(mutex);
+    if ( rc != 0 ) {
+        syslog(LOG_ERR,"timestamp err: pthread_mutex_lock failed with %d\n",rc);
+    }
+    // syslog(LOG_INFO, "%s",  "timestamp");
+    char outstr[200];
+    time_t t;
+    struct tm *tmp;
+
+    t = time(NULL);
+    tmp = localtime(&t);
+    if (tmp == NULL) {
+       syslog(LOG_ERR, "localtime");
+      return thread_param;
+       // exit(EXIT_FAILURE);
+    }
+
+    if (strftime(outstr, sizeof(outstr), "timestamp: %a, %d %b %Y %T %z\n", tmp) == 0) {
+      syslog(LOG_ERR, "strftime returned 0");
+      return thread_param;
+       // exit(EXIT_FAILURE);
+    }
+    FILE* file = fopen("/var/tmp/aesdsocketdata", "a");
+    fputs(outstr, file);
+    fclose(file);
+    rc = pthread_mutex_unlock(mutex);
+    if ( rc != 0 ) {
+        syslog(LOG_ERR,"timestamp err: pthread_mutex_unlock failed with %d\n",rc);
+    }
+    usleep(10 * 1000000);
+  }
+  return thread_param;
 }
 
 int listen_for_clients(const int server_fd) {
   int client_fd;
   struct sockaddr client;
 
-  if ((listen(server_fd, BACKLOG)) != 0) {
+    if ((listen(server_fd, BACKLOG)) != 0) {
     syslog(LOG_ERR, "listen failed");
     return 1;
   }
 
+  struct Node* clientList = NULL;
+  pthread_mutex_t mutex;
+  pthread_mutex_init(&mutex, NULL);
+
+  pthread_t timestamp_thread;
+  int rc = pthread_create(&timestamp_thread, NULL, append_timestamp, &mutex);
+  if ( rc != 0 ) {
+      syslog(LOG_ERR, "Failed to create timestamp thread, error was %d", rc);
+      return 1;
+  }
   while (!caught_sigint) {
+      
     struct sockaddr_in address = {0};
     socklen_t addr_size;
     addr_size = sizeof(client);
@@ -99,30 +155,54 @@ int listen_for_clients(const int server_fd) {
     }
     syslog(LOG_INFO, "Accepted a connection from: %s", inet_ntoa(address.sin_addr));
 
-    const int child_pid = fork();
-    if (child_pid == 0) {
-      // this is the child process
-      // close(server_fd); // child doesn't need the listener
-      handle_client(client_fd);
+    pthread_t* thread = (pthread_t*)malloc(sizeof(pthread_t));
+    thread_data* params = (thread_data*)malloc(sizeof(thread_data));
+    
+    params->client_fd = client_fd;
+    params->thread_completed = false;
+    params->thread = thread;
+    params->mutex = &mutex;
+
+    struct Node* clientNode = (Node*)malloc(sizeof(Node));
+    clientNode->data = params;
+    clientNode->next = NULL;
+
+    int rc = pthread_create(thread, NULL, handle_client, clientNode);
+    if ( rc != 0 ) {
+        syslog(LOG_ERR,"Failed to create thread, error was %d",rc);
+        return 1;
     } else {
-      waitpid(child_pid, NULL, 0);
+      if(clientList == NULL){
+        clientList = clientNode;
+      } else {
+        insertAtEnd(&clientList, clientNode);
+      }
     }
-    // close(client_fd); // parent doesn't need this
-    // exit(0);
+    // printList(clientList);
   }
+  while (clientList!= NULL) {
+    syslog(LOG_INFO,"joining thread for client fd: %d", clientList->data->client_fd);
+    syslog(LOG_INFO, "status for cliend fd %d is %d", clientList->data->client_fd, clientList->data->thread_completed);
+    // printf(" client fd: %d ", node->data->client_fd);
+    pthread_join(*clientList->data->thread, NULL);
+    free(clientList->data);
+    clientList = clientList->next;
+  }
+  pthread_mutex_destroy(&mutex);
   close(server_fd);
+  exit(0);
   return 0;
 }
 
-int main(int argc, char** argv) {
-  int status;
-  bool start_program = true;
+int main(const int argc, char** argv) {
+  // int status;
+  // bool start_program = true;
   bool do_fork = false;
   struct addrinfo hints;
   struct addrinfo* server;
 
-  memset(&hints, 0, sizeof(hints));
-  hints.ai_family = AF_UNSPEC;
+  memset(&hints, 0, sizeof(struct addrinfo));
+  hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
 
@@ -131,18 +211,22 @@ int main(int argc, char** argv) {
 
   if (sigaction(SIGINT, &signals, NULL) != 0) {
     syslog(LOG_ERR, "error registering sigint: %s", strerror(errno));
-    start_program = false;
+    // start_program = false;
+    return 1;
   }
   if (sigaction(SIGTERM, &signals, NULL) != 0) {
     syslog(LOG_ERR, "error registering sigterm: %s", strerror(errno));
-    start_program = false;
+    // start_program = false;
+    return 1;
   }
-  if (sigaction(SIGKILL, &signals, NULL) != 0) {
-    syslog(LOG_ERR, "error registering sigkill: %s", strerror(errno));
-    start_program = false;
-  }
-  if ((status = getaddrinfo(NULL, PORT, &hints, &server)) != 0) {
-    syslog(LOG_ERR, "getaddrinfo failed");
+  // SIGKILL is not allowed
+  // if (sigaction(SIGKILL, &signals, NULL) != 0) {
+    // syslog(LOG_ERR, "error registering sigkill: %s", strerror(errno));
+    // start_program = false;
+    // return 1;
+  // }
+  if (getaddrinfo("localhost", PORT, &hints, &server) != 0) {
+    syslog(LOG_ERR, "getaddrinfo failed: %s", strerror(errno));
     return 1;
   };
   const int server_fd = socket(server->ai_family, server->ai_socktype, server->ai_protocol);
@@ -150,13 +234,16 @@ int main(int argc, char** argv) {
     syslog(LOG_ERR, "socket failed");
     return 1;
   }
-  syslog(LOG_INFO, "socket fd: %d", server_fd);
-  if ((status = bind(server_fd, server->ai_addr, server->ai_addrlen)) != 0) {
-    syslog(LOG_ERR, "bind failed: %s", strerror(errno));
-    // printf("bind failed: %s", strerror(errno));
+  int one = 1;
+  setsockopt(server_fd,SOL_SOCKET ,SO_REUSEADDR ,&one ,sizeof(int));
+  // syslog(LOG_INFO, "socket fd: %d", server_fd);
+  if (bind(server_fd, server->ai_addr, server->ai_addrlen) != 0) {
+    syslog(LOG_ERR, "bind failed: %s", strerror(errno));    // printf("bind failed: %s", strerror(errno));
+    freeaddrinfo(server);
     return 1;
   }
   freeaddrinfo(server);
+ 
   if (argc > 1) {
     if (strcmp(argv[1], "-d") == 0) {
       do_fork = true;

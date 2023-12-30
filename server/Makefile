@@ -1,8 +1,9 @@
 CROSS_COMPILE ?= "native"
-TARGET=aesdsocket
-OBJS=aesdsocket.c
-CC=gcc
-CFLAGS=-Wall -Wextra
+TARGET ?= aesdsocket
+OBJS=aesdsocket.c linked_list.c
+CC ?= gcc
+CFLAGS ?= -Wall -Wextra
+LDFLAGS ?= -pthread
 
 .SILENT: all default clean
 
@@ -13,7 +14,7 @@ default:
 	if [ "$(CROSS_COMPILE)" = "aarch64-none-linux-gnu-" ]; then \
 		aarch64-none-linux-gnu-gcc $(OBJ) -o $(TARGET); \
 	elif [ "$(CROSS_COMPILE)" = "native" ]; then \
-		gcc $(OBJ) -o $(TARGET); \
+		$(CC) $(CFLAGS) $(INCLUDES) $(OBJ) -o $(TARGET) $(LDFLAGS); \
 	else \
 		echo "incorrect arguments"; \
 	fi \
