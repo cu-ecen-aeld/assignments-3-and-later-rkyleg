@@ -225,7 +225,7 @@ int main(const int argc, char** argv) {
     // start_program = false;
     // return 1;
   // }
-  if (getaddrinfo("localhost", PORT, &hints, &server) != 0) {
+  if (getaddrinfo(NULL, PORT, &hints, &server) != 0) {
     syslog(LOG_ERR, "getaddrinfo failed: %s", strerror(errno));
     return 1;
   };

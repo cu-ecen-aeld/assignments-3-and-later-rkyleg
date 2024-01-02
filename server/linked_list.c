@@ -10,7 +10,7 @@
 //   int data;
 //   struct Node* next;
 // };
-
+// Implementation from https://www.programiz.com/dsa/linked-list-operations
 // Insert at the beginning
 void insertAtBeginning(struct Node** head_ref,  Node* new_data) {
   // Allocate memory to a node
